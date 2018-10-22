@@ -70,7 +70,7 @@ A new [SchemaService](https://github.com/NateWr/pkp-lib/blob/i3594_forms/classes
 A schema can be loaded using the service class and the schema constants:
 
 ```
-$schemaServce = ServicesContainer::instance()->get('schema');
+$schemaService = ServicesContainer::instance()->get('schema');
 $schema = $schemaService->get(SCHEMA_CONTEXT);
 ```
 
