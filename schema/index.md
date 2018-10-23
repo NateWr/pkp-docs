@@ -12,8 +12,8 @@ It also briefly introduces new form components built in Vue.js and describes how
 - [SchemaDAO](#schemadao)
 - [Bringing together API endpoints, Service classes, and Schema](#bringing-together-api-endpoints-service-classes-and-schema)
 - [Forms](#forms)
+- [SettingsContainer for forms and tabs](#user-content-settingscontainer-for-forms-and-tabs)
 - [Extending Schemas and Forms](#extending-schemas-and-forms)
-- [Known Issues](#known-issues)
 
 ## Getting Started
 
