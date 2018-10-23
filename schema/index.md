@@ -38,7 +38,7 @@ cd lib/pkp
 composer update
 ```
 
-Backup your database and then run the upgrade tool:
+**Backup your database** and then run the upgrade tool:
 
 ```
 php tools/upgrade.php upgrade
@@ -60,8 +60,8 @@ Schemas are stored in a new top-level directory, `schemas`. When the application
 
 Several entities have been defined in a schema to assist the API documentation, but the only entities that are fully running off of schemas for DAO, validation and sanitization are Contexts and Sites:
 
-- Context: [pkp-lib](https://github.com/NateWr/pkp-lib/blob/i3594_forms/schemas/context.json), [ojs](https://github.com/NateWr/pkp-lib/blob/i3594_forms/schemas/context.json)
-- Site: [pkp-lib](https://github.com/NateWr/pkp-lib/blob/i3594_forms/schemas/site.json), [ojs](https://github.com/NateWr/pkp-lib/blob/i3594_forms/schemas/site.json)
+- Context: [pkp-lib](https://github.com/NateWr/pkp-lib/blob/i3594_forms/schemas/context.json), [ojs](https://github.com/NateWr/ojs/blob/i3594_forms/schemas/context.json)
+- Site: [ojs](https://github.com/NateWr/ojs/blob/i3594_forms/schemas/site.json)
 
 ### SchemaService
 
@@ -76,14 +76,14 @@ $schema = $schemaService->get(SCHEMA_CONTEXT);
 
 ### API Documentation
 
-Our API documentation has been converted to `json`. A new CLI tool, `tools/buildSwagger.php`, will compile the API documentation using the entity schema files. This can then be copied to the `pkp-docs` repository to update the documentation.
+Our API documentation has been converted to `json`. A new CLI tool, `tools/buildSwagger.php`, will compile the API documentation using `docs/dev/swagger-source.json` and the entity schema files. This can then be copied to the `pkp-docs` repository to update the documentation.
 
 ### Extending json-schema
 
 To serve our needs, we have introduced a few properties and practices that are not part of the official `json-schema` spec:
 
 #### `multilingual`
-Assigned to multilingual values. This property changes how a value is validated and sanitized. For example, consider the following property definition:
+Assigned to multilingual properties. This property changes how a value is validated and sanitized. For example, consider the following property definition:
 
 ```
 "about": {
@@ -92,7 +92,7 @@ Assigned to multilingual values. This property changes how a value is validated 
 },
 ```
 
-When validating and sanitizing this property, it will be expected to be an object. Each key in the object must match an active locale, and the value of each key will be validated against the `type` (string). So the following value would be expected in PHP:
+When validating and sanitizing this property, an object will be expected. Each object key must match an active locale, and the value of each key will be validated against the `type` (string, in this case). So the following value would be expected in PHP:
 
 ```
 [
@@ -106,21 +106,18 @@ When validating and sanitizing this property, it will be expected to be an objec
 The `multilingual` property can only be used on top-level properties. If a property is an object or array, the whole property must be multilingual, not an individual sub-property or a single item in the array.
 
 #### `readOnly`
-When this key is assigned to a property, the property is only expected to appear in API responses. It will not be considered an accepted property when validating user input.
+The property is only expected to appear in API responses. It will not be considered an accepted property when validating user input.
 
 #### `writeOnly`
-When this key is assigned to a property, the property is only expected to received in requests to add/edit an object. It will not be returned when requesting an object.
+The property is only expected to be sent in requests to add/edit an object. It will not be returned when requesting an object.
 
 This property is used for cases where a user may submit information that needs to be processed. An example is the `temporaryFileId` that is used to save a context file to the public directory, but is then discarded.
 
 #### `apiSummary`
-When this key is assigned to a property, the property will appear in summary views of the entity that are provided in the API. For example, when many contexts are listed in `/api/v1/contexts`.
+The property will appear in summary views of the entity that are provided in the API. For example, when many contexts are listed in `/api/v1/contexts`.
 
 #### `defaultLocaleKey`
-This key is assigned to a property when a default value must be localised. The value is a locale string.
-
-#### `patternErrorLocaleKey`
-This key is assigned when a property is validated according to a regex pattern. The value is a locale string that describes the error. See [Validation](#validation) below.
+The default value for this property must be localised. The value should be a locale string.
 
 #### `validation`
 This key describes validation rules that should be applied to the property. We do not support `json-schema`'s standard validation rules. See [Validation](#validation) below.
@@ -147,7 +144,29 @@ Validation rules should be defined in the schema with an array:
 ...
 ```
 
-All properties that may be assigned an empty value should have a `nullable` rule.
+All properties that may be assigned an empty value should have a `nullable` rule. For example, a `PUT` request with the following body will delete the `itemsPerPage` row from the `journal_settings` database:
+
+```
+{
+	"itemsPerPage": ""
+}
+```
+
+Type validation will occur automatically based on the `type` property. The following `integer` validation is redundant:
+
+```
+...
+	"itemsPerPage": {
+		"type": "integer",
+		"default": 25,
+		"validation": [
+			"integer",
+			"nullable",
+			"min:1"
+		]
+	},
+...
+```
 
 ### Validating an object
 
@@ -186,18 +205,18 @@ $validator = \ValidatorFactory::make(
 
 In addition to the standard Laravel-style validation rules, `ValidatorFactory` includes helper methods for checking rules around our app's multilingual support. These include:
 
-- `ValidatorFactory::required()` Check for required fields with proper handling of multingual fields
+- `ValidatorFactory::required()` Check for required fields with proper handling of multilingual fields
 - `ValidatorFactory::allowedLocales()` Check that no input has been sent from an unsupported locale
-- `ValidatorFactory::requirePrimaryLocale()` Pass props that should be required in the primary locale if data for any other locale exists
+- `ValidatorFactory::requirePrimaryLocale()` Pass an array of keys for props that should require the primary locale when data for any other locale exists
 
 ### Custom Validation Rules
 
-Custom validation rules can be written in `ValidatorFactory::make()`. OJS includes the following:
+New global validation rules can be written in `ValidatorFactory::make()`. OJS includes the following:
 
 - `email_or_localhost` (extends Laravel's email validation to accept `localhost`)
 - `issn`
 - `orcid`
-- `currency` (checks if the valus is a recognized currency)
+- `currency` (checks if the value is a recognized currency code)
 
 ### Entity-specific Validation Rules
 
@@ -236,11 +255,11 @@ if ($validator->fails()) {
 }
 ```
 
-However, this practice should be *discouraged* in all but exceptional cases. Whenever an entity is validated, it should be passed though it's Service class's `validate` method to ensure the appropriate hooks are fired.
+However, this practice should be *discouraged* in all but exceptional cases. Whenever an object is validated, it should be passed though its Service class's `validate` method to ensure the appropriate hooks are fired.
 
 ### Deprecating the `Validator` classes
 
-Some of the old `Validator` classes have been removed. Those that remain have been refactored to use Laravel's validation library under-the-hood.
+Some of the old `Validator` classes have been removed. Those that remain are used by a `FormValidator`. They have been refactored to use Laravel's validation library under-the-hood.
 
 ## SchemaDAO
 
@@ -254,7 +273,7 @@ The `SiteDAO` could not take advantage of the `SchemaDAO` because there is no `s
 
 ## Bringing together API endpoints, Service classes, and Schema
 
-The API's [PKPContextHandler](https://github.com/NateWr/pkp-lib/blob/i3594_forms/api/v1/contexts/PKPContextHandler.inc.php) is the best demonstration of how the schemas, services and DAOs are meant to work together.
+[PKPContextHandler](https://github.com/NateWr/pkp-lib/blob/i3594_forms/api/v1/contexts/PKPContextHandler.inc.php) is the best demonstration of how the schemas, services and DAOs are meant to work together to handle an API request. [ManagementHandler](https://github.com/NateWr/pkp-lib/blob/i3594_forms/pages/management/ManagementHandler.inc.php) is the best example of a Page request.
 
 ## Forms
 
@@ -284,7 +303,7 @@ $masthead->addField(new FieldText('name', [
 	]));
 ```
 
-`Field` and it's child classes correspond to a Vue component in the UI Library.
+Each of the `Field` child classes correspond to a Vue component in the UI Library.
 
 ### Built-in Forms
 
@@ -292,7 +311,7 @@ Built-in forms extend the `FormComponent` and encapsulate the setup in the const
 
 ### /components
 
-`FormComponent` and its child classes stored in `/components`, a new directory for UI classes. These classes do not handle requests or modify data. They are only called upon to assemble data that will be passed to Vue components. The `ListHandler` has been changed to `ListPanel` and moved into this directory.
+`FormComponent` and its child classes are stored in `/components`, a new directory for UI classes. These classes do not handle requests or modify data. They are only called upon to assemble data that will be passed to Vue components. The `ListHandler` has been changed to `ListPanel` and moved into this directory.
 
 (I'm happy for them to go anywhere, but I think it's good to keep them separate from `Handler` classes.)
 
@@ -317,7 +336,7 @@ Vue.js has strict rules on how to update values in a component. These rules ensu
 
 This usually means an app-level component acts as the conductor of any changes to state on the page. Sometimes a state-management library like Vuex is used. To get the tabs and forms going, I only needed a very light state-management layer. For that reason, I created a Vue component, `SettingsContainer`, that manages forms. It simply listens to three update events from forms and updates the data when requested.
 
-In the future, we will need to explore more wide-ranging solutions to this, alongside issues like how we split code, especially when we look at the workflow. These are big discussions that I felt would unnecessarily delay this merge. For now, `SettingsContainer` is a lightweight solution that allows all the different parts we need to work alongside each other.
+In the future, we will need to explore more wide-ranging solutions to this, alongside issues like how we split code -- especially when we look at the workflow. These are big discussions that I felt would unnecessarily delay this merge. For now, `SettingsContainer` is a lightweight solution that allows all the different parts we need to work alongside each other.
 
 To get a form onto the page, we pass the form data into a settings component. In the example below, we create our form and prepare our template data:
 
@@ -366,7 +385,7 @@ In the example below, we compose our settings page in a `.tpl` file and pass the
 
 ## Extending Schemas and Forms
 
-Schemas can be extended by plugins to add, edit or remove the properties of an entity (see [hook](https://github.com/NateWr/pkp-lib/blob/i3594_forms/classes/services/PKPSchemaService.inc.php#L89)).
+Schemas can be extended by plugins to add, edit or remove the properties of an entity.
 
 I built a small [example plugin](https://github.com/NateWr/institutionalHome) to demonstrate how data can be attached to entities and then added to a form.
 
