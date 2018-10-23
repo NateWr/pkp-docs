@@ -23,6 +23,13 @@ You will need to check out the following PRs:
 - pkp-lib: https://github.com/pkp/pkp-lib/pull/3931
 - ui-library: https://github.com/pkp/ui-library/pull/20
 
+You may run into issues if you don't update the submodules as well:
+
+```
+cd <ojs-directory>
+git submodule update --init --recursive
+```
+
 You will need to install node dependencies and build the JS:
 
 ```
