@@ -1,6 +1,6 @@
 # Introduction to Schema
 
-This document describes proposed changes to define entities in OJS/OMP using an extended form of `json-schema`. These machine-readable descriptions can then be used to sanitize, validate and read/write to the database.
+This document describes a new way to define entities in OJS/OMP using an extended form of `json-schema`. These machine-readable descriptions can then be used to sanitize, validate and read/write to the database.
 
 It also briefly introduces new form components built in Vue.js and describes how they can be instantiated and extended alongside an entity schema.
 
@@ -17,25 +17,11 @@ It also briefly introduces new form components built in Vue.js and describes how
 
 ## Getting Started
 
-You will need to check out the following PRs:
-
-- ojs: https://github.com/pkp/ojs/pull/2067
-- pkp-lib: https://github.com/pkp/pkp-lib/pull/3931
-- ui-library: https://github.com/pkp/ui-library/pull/20
-
-You may run into issues if you don't update the submodules as well:
+If you haven't yet, update the submodules:
 
 ```
 cd <ojs-directory>
 git submodule update --init --recursive
-```
-
-You will need to install node dependencies and build the JS:
-
-```
-cd <ojs-directory>
-npm install
-npm run dev
 ```
 
 Update composer dependencies in `lib/pkp`:
@@ -45,13 +31,21 @@ cd lib/pkp
 composer update
 ```
 
-**Backup your database** and then run the upgrade tool:
+Install new node dependencies and build the JS:
+
+```
+cd <ojs-directory>
+npm install
+npm run build
+```
+
+Run the upgrade tool (backup your DB if you need to work on 3.1.2):
 
 ```
 php tools/upgrade.php upgrade
 ```
 
-I encourage you to look at the UI Library to see a couple example forms that include all of the existing form fields. To view that:
+When you have time, I encourage you to look at the UI Library to see documentation on the forms. To view that:
 
 ```
 cd <ojs-directory>/lib/ui-library
@@ -63,21 +57,21 @@ npm run dev
 
 Entities are defined using [json-schema](http://json-schema.org/). Here are some [quick examples](http://json-schema.org/learn/getting-started-step-by-step.html).
 
-Schemas are stored in a new top-level directory, `schemas`. When the application finds a schema with the same name in `<root>/schemas` and `<root>/lib/pkp/schemas`, the schemas are merged.
+Schemas are stored in a new top-level directory, `schemas`. When the application finds a schema with the same name in `<root>/schemas` and `<root>/lib/pkp/schemas`, the schemas are merged. This is how an application can add properties to a base entity.
 
 Several entities have been defined in a schema to assist the API documentation, but the only entities that are fully running off of schemas for DAO, validation and sanitization are Contexts and Sites:
 
-- Context: [pkp-lib](https://github.com/NateWr/pkp-lib/blob/i3594_forms/schemas/context.json), [ojs](https://github.com/NateWr/ojs/blob/i3594_forms/schemas/context.json)
-- Site: [ojs](https://github.com/NateWr/ojs/blob/i3594_forms/schemas/site.json)
+- Context: [pkp-lib](https://github.com/pkp/pkp-lib/blob/master/schemas/context.json), [ojs](https://github.com/pkp/ojs/blob/master/schemas/context.json)
+- Site: [ojs](https://github.com/pkp/ojs/blob/master/schemas/site.json)
 
 ### SchemaService
 
-A new [SchemaService](https://github.com/NateWr/pkp-lib/blob/i3594_forms/classes/services/PKPSchemaService.inc.php) class has been created to load and merge schemas, validate properties against a schema, and more.
+A new [SchemaService](https://github.com/pkp/pkp-lib/blob/master/classes/services/PKPSchemaService.inc.php) class has been created to load and merge schemas, validate properties against a schema, and more.
 
 A schema can be loaded using the service class and the schema constants:
 
 ```
-$schemaService = ServicesContainer::instance()->get('schema');
+$schemaService = Services::get('schema');
 $schema = $schemaService->get(SCHEMA_CONTEXT);
 ```
 
@@ -191,7 +185,7 @@ if (!empty($errors)) {
 The `validate` method draws on `ValidatorFactory`, which can be used to validate data against a rule-set. The example below shows how the schema is used to generate the validation rules:
 
 ```
-$schemaService = ServicesContainer::instance()->get('schema');
+$schemaService = Services::get('schema');
 import('lib.pkp.classes.validation.ValidatorFactory');
 $validator = \ValidatorFactory::make(
 	$props,
@@ -229,7 +223,7 @@ New global validation rules can be written in `ValidatorFactory::make()`. OJS in
 
 In some cases, validation is required that can not be declared in the `json-schema`. These rules should be declared in the Service class's `validate` method using the [after validation hook](https://laravel.com/docs/5.5/validation#after-validation-hook).
 
-For example, two journals can not have the same `path`. To validate this, we have to check the database. The example below shows how to make this check the `path` property:
+For example, two journals can not have the same `path`. To validate a new `path` value, we have to check the database. The example below, which appears in `PKPContextService::validate()`, shows how to check the `path` property:
 
 ```
 $validator->after(function($validator) use ($action, $props) {
@@ -262,7 +256,7 @@ if ($validator->fails()) {
 }
 ```
 
-However, this practice should be *discouraged* in all but exceptional cases. Whenever an object is validated, it should be passed though its Service class's `validate` method to ensure the appropriate hooks are fired.
+However, this practice should be *discouraged* in most cases. Whenever an object is validated, it should be passed though its Service class's `validate` method to ensure the appropriate hooks are fired.
 
 ### Deprecating the `Validator` classes
 
@@ -270,17 +264,17 @@ Some of the old `Validator` classes have been removed. Those that remain are use
 
 ## SchemaDAO
 
-With the schema, it becomes possible to automate the most common read/write actions in the database. To explore this approach, I've created a new [SchemaDAO](https://github.com/NateWr/pkp-lib/blob/i3594_forms/classes/db/SchemaDAO.inc.php) class. `ContextDAO` extends it.
+With the schema, it becomes possible to handle the most common read/write actions in the database with a parent DAO class. To explore this approach, I've created a new [SchemaDAO](https://github.com/pkp/pkp-lib/blob/master/classes/db/SchemaDAO.inc.php) class. `ContextDAO` extends it.
 
-A `SchemaDAO` expects some configuration properties which tell it what schema to get, what tables it interacts with, etc. It then runs the `insertObject`, `updateObject`, `deleteObject`, and `_fromRow` methods without requiring specification outside of the schemas.
+A `SchemaDAO` expects some configuration properties which tell it what schema to get, what tables it interacts with, etc. It then runs the `insertObject`, `updateObject`, `deleteObject`, and `_fromRow` methods based on the entity definition in the schema.
 
-Now that we use the new `QueryBuilder` approach for complex selects, it may be possible to implement all or most of our DAOs without any further code in the DAO.
+Now that we use the new `QueryBuilder` approach for complex selects, it may be possible to implement all or most of our DAOs with common code in `SchemaDAO`.
 
-The `SiteDAO` could not take advantage of the `SchemaDAO` because there is no `site_id`. I felt it was an exception and hope the `SchemaDAO` approach will prove useful in just about every other object we use.
+`SiteDAO` could not take advantage of `SchemaDAO` because there is no `site_id`. I felt it was an exception and hope the `SchemaDAO` approach will prove useful in just about every other object we use.
 
 ## Bringing together API endpoints, Service classes, and Schema
 
-[PKPContextHandler](https://github.com/NateWr/pkp-lib/blob/i3594_forms/api/v1/contexts/PKPContextHandler.inc.php) is the best demonstration of how the schemas, services and DAOs are meant to work together to handle an API request. [ManagementHandler](https://github.com/NateWr/pkp-lib/blob/i3594_forms/pages/management/ManagementHandler.inc.php) is the best example of a Page request.
+[PKPContextHandler](https://github.com/pkp/pkp-lib/blob/master/api/v1/contexts/PKPContextHandler.inc.php) is the best demonstration of how the schemas, services and DAOs are meant to work together to handle an API request. [ManagementHandler](https://github.com/pkp/pkp-lib/blob/master/pages/management/ManagementHandler.inc.php) is the best example of a Page request.
 
 ## Forms
 
@@ -314,13 +308,11 @@ Each of the `Field` child classes correspond to a Vue component in the UI Librar
 
 ### Built-in Forms
 
-Built-in forms extend the `FormComponent` and encapsulate the setup in the constructor, so that dependencies can be documented clearly and app-specific requirements can be managed with the typical `Class extends PKPClass` method. An example is [MastheadForm](https://github.com/NateWr/ojs/blob/master/controllers/tab/settings/masthead/form/MastheadForm.inc.php) and [PKPMastheadForm](https://github.com/NateWr/pkp-lib/blob/i3594_forms/components/forms/context/PKPMastheadForm.inc.php).
+Built-in forms extend the `FormComponent` and encapsulate the setup in the constructor, so that dependencies can be documented clearly and app-specific requirements can be managed with the typical `Class extends PKPClass` method. An example is [MastheadForm](https://github.com/pkp/ojs/blob/master/classes/components/forms/context/MastheadForm.inc.php) and [PKPMastheadForm](https://github.com/pkp/pkp-lib/blob/master/classes/components/forms/context/PKPMastheadForm.inc.php).
 
 ### /components
 
 `FormComponent` and its child classes are stored in `/components`, a new directory for UI classes. These classes do not handle requests or modify data. They are only called upon to assemble data that will be passed to Vue components. The `ListHandler` has been changed to `ListPanel` and moved into this directory.
-
-(I'm happy for them to go anywhere, but I think it's good to keep them separate from `Handler` classes.)
 
 ### Groups and Pages
 
@@ -337,15 +329,11 @@ Forms always send a `PUT` or `POST` request to the API and expect to receive one
 Further details in the [API Documentation](https://docs.pkp.sfu.ca/dev/api/ojs/dev).
 
 
-## SettingsContainer for Forms and Tabs
+## Vue.js container component for Forms and Tabs
 
-Vue.js has strict rules on how to update values in a component. These rules ensure that Vue can observe changes to the data and re-render whenever it is changed. Due to this, data management is pushed "up" to the root component.
+To get a form onto the page, we pass the form data into a `Container` component, which can manage data for multiple forms.
 
-This usually means an app-level component acts as the conductor of any changes to state on the page. Sometimes a state-management library like Vuex is used. To get the tabs and forms going, I only needed a very light state-management layer. For that reason, I created a Vue component, `SettingsContainer`, that manages forms. It simply listens to three update events from forms and updates the data when requested.
-
-In the future, we will need to explore more wide-ranging solutions to this, alongside issues like how we split code -- especially when we look at the workflow. These are big discussions that I felt would unnecessarily delay this merge. For now, `SettingsContainer` is a lightweight solution that allows all the different parts we need to work alongside each other.
-
-To get a form onto the page, we pass the form data into a settings component. In the example below, we create our form and prepare our template data:
+In the example below, we create our form and prepare our template data:
 
 ```
 import('lib.pkp.components.forms.context.PKPContactForm');
